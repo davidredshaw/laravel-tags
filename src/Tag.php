@@ -35,6 +35,26 @@ class Tag extends Model implements Sortable
         return $query->whereRaw("LOWER(JSON_EXTRACT(name, '$.".$locale."')) like ?", ['"%'.strtolower($name).'%"']);
     }
 
+    public function scopeTagNameForLocale(Builder $query, string $name, $locale): Builder
+    {
+
+        switch (config('tags.database')) {
+            case 'mysql':
+
+                return $query->where("name->{$locale}", $name);
+
+            case 'mariadb':
+
+                $value = '"' . $name . '"';
+                $property = '$.' . $locale;
+
+                return $query->whereRaw("JSON_CONTAINS(`name`, ?, ?)",[$value, $property] );
+
+                break;
+        }
+        return $query;
+    }
+
     /**
      * @param array|\ArrayAccess $values
      * @param string|null $type
@@ -65,9 +85,11 @@ class Tag extends Model implements Sortable
         $locale = $locale ?? app()->getLocale();
 
         return static::query()
-            ->where("name->{$locale}", $name)
+            ->tagNameForLocale($name, $locale)
+            // ->where("name->{$locale}", $name)
             ->where('type', $type)
             ->first();
+
     }
 
     public static function findFromStringOfAnyType(string $name, string $locale = null)
@@ -75,8 +97,10 @@ class Tag extends Model implements Sortable
         $locale = $locale ?? app()->getLocale();
 
         return static::query()
-            ->where("name->{$locale}", $name)
+            ->tagNameForLocale($name, $locale)
+            // ->where("name->{$locale}", $name)
             ->first();
+
     }
 
     protected static function findOrCreateFromString(string $name, string $type = null, string $locale = null): self
@@ -85,9 +109,11 @@ class Tag extends Model implements Sortable
 
         $tag = static::findFromString($name, $type, $locale);
 
+        $name = [$locale => $name];
+
         if (! $tag) {
             $tag = static::create([
-                'name' => [$locale => $name],
+                'name' => $name,
                 'type' => $type,
             ]);
         }
